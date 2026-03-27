@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Personal OS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f13; color: #f0f0f5; font-family: system-ui, sans-serif; }
+  input, select, textarea, button { font-family: inherit; }
+  input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #0f0f13; } ::-webkit-scrollbar-thumb { background: #2e2e3a; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+// ── storage (localStorage) ──────────────────────────────────────────────────
+function useStore(key, fallback) {
+  const [val, setVal] = useState(() => {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+  });
+  const save = useCallback((v) => {
+    setVal(prev => {
+      const updated = typeof v === "function" ? v(prev) : v;
+      try { localStorage.setItem(key, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, [key]);
+  return [val, save];
+}
+
+// ── helpers ─────────────────────────────────────────────────────────────────
+const uid = () => Math.random().toString(36).slice(2, 9);
+const today = () => new Date().toISOString().slice(0, 10);
+const fmt = (n) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
+
+const CATS = ["Work", "Personal", "Health", "Learning", "Other"];
+const NOTE_TAGS = ["Idea", "Reference", "Journal", "Project", "Quote", "Other"];
+const ACCOUNT_ICONS = { General: "◎", Savings: "◈", Investment: "◉", Cash: "◌", Other: "◍" };
+const ACCOUNT_COLORS = { General: "#534ab7", Savings: "#0f6e56", Investment: "#185fa5", Cash: "#854f0b", Other: "#5f5e5a" };
+
+// ── styles ───────────────────────────────────────────────────────────────────
+const s = {
+  app: { display: "flex", height: "100vh", fontFamily: "system-ui, sans-serif", background: "#0f0f13", color: "#f0f0f5", overflow: "hidden" },
+  sidebar: { width: 220, minWidth: 220, background: "#18181f", borderRight: "0.5px solid #2e2e3a", display: "flex", flexDirection: "column", padding: "1.5rem 0" },
+  sideTitle: { fontSize: 18, fontWeight: 500, color: "#f0f0f5", padding: "0 1.25rem 1.5rem", letterSpacing: "-0.3px" },
+  navItem: (active) => ({ display: "flex", alignItems: "center", gap: 10, padding: "0.55rem 1.25rem", cursor: "pointer", fontSize: 14, fontWeight: active ? 500 : 400, color: active ? "#fff" : "#888", background: active ? "#24243a" : "transparent", borderLeft: active ? "2px solid #7f77dd" : "2px solid transparent", transition: "all 0.15s" }),
+  main: { flex: 1, overflow: "auto", padding: "2rem 2.5rem" },
+  header: { fontSize: 24, fontWeight: 500, marginBottom: "1.75rem", color: "#f0f0f5" },
+  card: { background: "#18181f", border: "0.5px solid #2e2e3a", borderRadius: 12, padding: "1.25rem 1.5rem", marginBottom: "1rem" },
+  input: { background: "#0f0f13", border: "0.5px solid #2e2e3a", borderRadius: 8, color: "#f0f0f5", fontSize: 14, padding: "0.5rem 0.75rem", outline: "none", width: "100%" },
+  btn: (v) => ({ background: v === "primary" ? "#534ab7" : "transparent", border: `0.5px solid ${v === "primary" ? "#7f77dd" : "#2e2e3a"}`, borderRadius: 8, color: v === "primary" ? "#fff" : "#aaa", fontSize: 13, fontWeight: 500, padding: "0.45rem 1rem", cursor: "pointer" }),
+  tag: (c) => { const map = { Work: "#534ab7", Personal: "#0f6e56", Health: "#993c1d", Learning: "#185fa5", Other: "#5f5e5a", Idea: "#854f0b", Reference: "#0c447c", Journal: "#993556", Project: "#3b6d11", Quote: "#5f5e5a" }; return { background: (map[c] || "#2e2e3a") + "33", color: map[c] || "#888", border: `0.5px solid ${map[c] || "#2e2e3a"}55`, borderRadius: 6, fontSize: 12, padding: "2px 8px", fontWeight: 500, display: "inline-block" }; },
+  row: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" },
+  label: { fontSize: 12, color: "#666", marginBottom: 4, display: "block" },
+  metricCard: { background: "#18181f", border: "0.5px solid #2e2e3a", borderRadius: 10, padding: "1rem 1.25rem", flex: 1 },
+  pill: (done) => ({ width: 18, height: 18, borderRadius: "50%", border: `1.5px solid ${done ? "#7f77dd" : "#444"}`, background: done ? "#534ab7" : "transparent", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }),
+  del: { background: "none", border: "none", color: "#555", fontSize: 16, cursor: "pointer", padding: "0 4px" },
+  select: { background: "#0f0f13", border: "0.5px solid #2e2e3a", borderRadius: 8, color: "#f0f0f5", fontSize: 13, padding: "0.45rem 0.6rem", outline: "none" },
+  prog: () => ({ height: 6, borderRadius: 3, background: "#0f0f13", overflow: "hidden", position: "relative", flex: 1 }),
+  progInner: (pct) => ({ height: "100%", width: `${Math.min(pct, 100)}%`, background: "#534ab7", borderRadius: 3 }),
+  txBadge: (type) => ({ fontSize: 12, fontWeight: 500, padding: "2px 8px", borderRadius: 6, background: type === "income" ? "#0f6e5622" : "#99001d22", color: type === "income" ? "#1d9e75" : "#e24b4a", border: `0.5px solid ${type === "income" ? "#0f6e5644" : "#e24b4a44"}` }),
+  noteCard: { background: "#18181f", border: "0.5px solid #2e2e3a", borderRadius: 12, padding: "1.25rem 1.5rem", cursor: "pointer" },
+  textarea: { background: "#0f0f13", border: "0.5px solid #2e2e3a", borderRadius: 8, color: "#f0f0f5", fontSize: 14, padding: "0.6rem 0.75rem", outline: "none", width: "100%", resize: "vertical", minHeight: 80, fontFamily: "system-ui, sans-serif" },
+};
+
+const NAV = [
+  { id: "life", label: "Life Planner", icon: "◈" },
+  { id: "finance", label: "Finance Tracker", icon: "◎" },
+  { id: "brain", label: "Second Brain", icon: "◉" },
+];
+
+// ── Life Planner ─────────────────────────────────────────────────────────────
+function LifePlanner({ tasks, saveTasks, goals, saveGoals, habits, saveHabits }) {
+  const [tab, setTab] = useState("tasks");
+  const [newTask, setNewTask] = useState({ title: "", cat: "Personal", priority: "medium", due: "" });
+  const [newGoal, setNewGoal] = useState({ title: "", target: "", current: "", cat: "Personal" });
+  const [newHabit, setNewHabit] = useState({ title: "", freq: "Daily" });
+
+  const addTask = () => { if (!newTask.title.trim()) return; saveTasks(p => [...p, { ...newTask, id: uid(), done: false, created: today() }]); setNewTask({ title: "", cat: "Personal", priority: "medium", due: "" }); };
+  const toggleTask = (id) => saveTasks(p => p.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const delTask = (id) => saveTasks(p => p.filter(t => t.id !== id));
+  const addGoal = () => { if (!newGoal.title.trim()) return; saveGoals(p => [...p, { ...newGoal, id: uid(), current: +newGoal.current || 0, target: +newGoal.target || 100 }]); setNewGoal({ title: "", target: "", current: "", cat: "Personal" }); };
+  const delGoal = (id) => saveGoals(p => p.filter(g => g.id !== id));
+  const updateGoal = (id, current) => saveGoals(p => p.map(g => g.id === id ? { ...g, current: +current } : g));
+  const addHabit = () => { if (!newHabit.title.trim()) return; saveHabits(p => [...p, { ...newHabit, id: uid(), log: [] }]); setNewHabit({ title: "", freq: "Daily" }); };
+  const delHabit = (id) => saveHabits(p => p.filter(h => h.id !== id));
+  const toggleHabit = (id) => { const t = today(); saveHabits(p => p.map(h => h.id === id ? { ...h, log: h.log.includes(t) ? h.log.filter(d => d !== t) : [...h.log, t] } : h)); };
+  const streak = (log) => { let s = 0, d = new Date(); while (true) { const k = d.toISOString().slice(0, 10); if (!log.includes(k)) break; s++; d.setDate(d.getDate() - 1); } return s; };
+  const done = tasks.filter(t => t.done).length;
+  const PCOLOR = { high: "#e24b4a", medium: "#ef9f27", low: "#1d9e75" };
+
+  return (
+    <div>
+      <div style={{ ...s.row, marginBottom: "1.5rem", gap: 8 }}>
+        {["tasks", "goals", "habits"].map(t => <button key={t} style={{ ...s.btn(tab === t ? "primary" : "ghost"), textTransform: "capitalize" }} onClick={() => setTab(t)}>{t}</button>)}
+      </div>
+      {tab === "tasks" && (<>
+        <div style={{ display: "flex", gap: 12, marginBottom: "1.5rem", flexWrap: "wrap" }}>
+          {[["Total", tasks.length, "#f0f0f5"], ["Done", done, "#1d9e75"], ["Remaining", tasks.length - done, "#ef9f27"]].map(([l, v, c]) => <div key={l} style={s.metricCard}><div style={s.label}>{l}</div><div style={{ fontSize: 22, fontWeight: 500, color: c }}>{v}</div></div>)}
+        </div>
+        <div style={s.card}>
+          <div style={s.row}>
+            <input style={{ ...s.input, flex: 2 }} placeholder="New task…" value={newTask.title} onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))} onKeyDown={e => e.key === "Enter" && addTask()} />
+            <select style={s.select} value={newTask.cat} onChange={e => setNewTask(p => ({ ...p, cat: e.target.value }))}>{CATS.map(c => <option key={c}>{c}</option>)}</select>
+            <select style={s.select} value={newTask.priority} onChange={e => setNewTask(p => ({ ...p, priority: e.target.value }))}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+            <input type="date" style={s.select} value={newTask.due} onChange={e => setNewTask(p => ({ ...p, due: e.target.value }))} />
+            <button style={s.btn("primary")} onClick={addTask}>Add</button>
+          </div>
+        </div>
+        {tasks.length === 0 && <div style={{ color: "#555", fontSize: 14, textAlign: "center", marginTop: "2rem" }}>No tasks yet.</div>}
+        {tasks.map(t => (
+          <div key={t.id} style={{ ...s.card, display: "flex", alignItems: "center", gap: 12, opacity: t.done ? 0.5 : 1 }}>
+            <div style={s.pill(t.done)} onClick={() => toggleTask(t.id)}>{t.done && <span style={{ color: "#fff", fontSize: 10 }}>✓</span>}</div>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: 14, fontWeight: 500, textDecoration: t.done ? "line-through" : "none", color: t.done ? "#555" : "#f0f0f5" }}>{t.title}</span>
+              <div style={{ ...s.row, marginTop: 4, gap: 6 }}>
+                <span style={s.tag(t.cat)}>{t.cat}</span>
+                <span style={{ fontSize: 12, color: PCOLOR[t.priority] || "#888", fontWeight: 500 }}>{t.priority}</span>
+                {t.due && <span style={{ fontSize: 12, color: "#555" }}>Due {t.due}</span>}
+              </div>
+            </div>
+            <button style={s.del} onClick={() => delTask(t.id)}>×</button>
+          </div>
+        ))}
+      </>)}
+      {tab === "goals" && (<>
+        <div style={s.card}>
+          <div style={s.row}>
+            <input style={{ ...s.input, flex: 2 }} placeholder="Goal title…" value={newGoal.title} onChange={e => setNewGoal(p => ({ ...p, title: e.target.value }))} />
+            <input style={{ ...s.input, flex: 1 }} placeholder="Current" type="number" value={newGoal.current} onChange={e => setNewGoal(p => ({ ...p, current: e.target.value }))} />
+            <input style={{ ...s.input, flex: 1 }} placeholder="Target" type="number" value={newGoal.target} onChange={e => setNewGoal(p => ({ ...p, target: e.target.value }))} />
+            <select style={s.select} value={newGoal.cat} onChange={e => setNewGoal(p => ({ ...p, cat: e.target.value }))}>{CATS.map(c => <option key={c}>{c}</option>)}</select>
+            <button style={s.btn("primary")} onClick={addGoal}>Add</button>
+          </div>
+        </div>
+        {goals.length === 0 && <div style={{ color: "#555", fontSize: 14, textAlign: "center", marginTop: "2rem" }}>No goals yet.</div>}
+        {goals.map(g => { const pct = g.target ? Math.round((g.current / g.target) * 100) : 0; return (
+          <div key={g.id} style={s.card}>
+            <div style={{ ...s.row, marginBottom: 8 }}>
+              <span style={{ fontWeight: 500, flex: 1 }}>{g.title}</span>
+              <span style={s.tag(g.cat)}>{g.cat}</span>
+              <span style={{ fontSize: 13, color: "#888" }}>{g.current}/{g.target}</span>
+              <button style={s.del} onClick={() => delGoal(g.id)}>×</button>
+            </div>
+            <div style={{ ...s.row, gap: 10 }}>
+              <div style={s.prog(pct)}><div style={s.progInner(pct)} /></div>
+              <span style={{ fontSize: 13, color: "#7f77dd", fontWeight: 500, minWidth: 36 }}>{pct}%</span>
+            </div>
+            <input type="range" min={0} max={g.target} value={g.current} style={{ width: "100%", accentColor: "#534ab7", marginTop: 8 }} onChange={e => updateGoal(g.id, e.target.value)} />
+          </div>
+        ); })}
+      </>)}
+      {tab === "habits" && (<>
+        <div style={s.card}>
+          <div style={s.row}>
+            <input style={{ ...s.input, flex: 2 }} placeholder="Habit name…" value={newHabit.title} onChange={e => setNewHabit(p => ({ ...p, title: e.target.value }))} onKeyDown={e => e.key === "Enter" && addHabit()} />
+            <select style={s.select} value={newHabit.freq} onChange={e => setNewHabit(p => ({ ...p, freq: e.target.value }))}><option>Daily</option><option>Weekly</option></select>
+            <button style={s.btn("primary")} onClick={addHabit}>Add</button>
+          </div>
+        </div>
+        {habits.length === 0 && <div style={{ color: "#555", fontSize: 14, textAlign: "center", marginTop: "2rem" }}>No habits yet.</div>}
+        {habits.map(h => { const checked = h.log.includes(today()); const st = streak(h.log); return (
+          <div key={h.id} style={{ ...s.card, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={s.pill(checked)} onClick={() => toggleHabit(h.id)}>{checked && <span style={{ color: "#fff", fontSize: 10 }}>✓</span>}</div>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontWeight: 500, fontSize: 14 }}>{h.title}</span>
+              <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>{h.freq} · {st > 0 ? `${st} day streak` : "Start today"}</div>
+            </div>
+            <div style={{ display: "flex", gap: 3 }}>
+              {Array.from({ length: 7 }).map((_, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); const k = d.toISOString().slice(0, 10); return <div key={i} style={{ width: 10, height: 10, borderRadius: 2, background: h.log.includes(k) ? "#534ab7" : "#222" }} />; })}
+            </div>
+            <button style={s.del} onClick={() => delHabit(h.id)}>×</button>
+          </div>
+        ); })}
+      </>)}
+    </div>
+  );
+}
+
+// ── Finance Tracker ──────────────────────────────────────────────────────────
+function AccountOverview({ accounts, txns, onSelect, onAdd, onDel }) {
+  const totalFor = (id) => { const ts = txns.filter(t => t.accountId === id); return ts.filter(t => t.type === "income").reduce((a, t) => a + t.amount, 0) - ts.filter(t => t.type === "expense").reduce((a, t) => a + t.amount, 0); };
+  const allIncome = txns.filter(t => t.type === "income").reduce((a, t) => a + t.amount, 0);
+  const allExpense = txns.filter(t => t.type === "expense").reduce((a, t) => a + t.amount, 0);
+  const allNet = allIncome - allExpense;
+  const [newAcc, setNewAcc] = useState({ name: "", type: "General" });
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 12, marginBottom: "1.5rem", flexWrap: "wrap" }}>
+        {[["Total income", allIncome, "#1d9e75"], ["Total expenses", allExpense, "#e24b4a"], ["Net balance", allNet, allNet >= 0 ? "#7f77dd" : "#e24b4a"]].map(([l, v, c]) => <div key={l} style={s.metricCard}><div style={s.label}>{l}</div><div style={{ fontSize: 20, fontWeight: 500, color: c }}>{fmt(v)}</div></div>)}
+      </div>
+      <div style={{ ...s.row, justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontWeight: 500, fontSize: 14, color: "#aaa" }}>Accounts</span>
+        <button style={s.btn("primary")} onClick={() => setAdding(a => !a)}>+ New account</button>
+      </div>
+      {adding && (
+        <div style={{ ...s.card, marginBottom: 12 }}>
+          <div style={s.row}>
+            <input style={{ ...s.input, flex: 2 }} placeholder="Account name…" value={newAcc.name} onChange={e => setNewAcc(p => ({ ...p, name: e.target.value }))} onKeyDown={e => e.key === "Enter" && newAcc.name.trim() && (onAdd(newAcc), setNewAcc({ name: "", type: "General" }), setAdding(false))} />
+            <select style={s.select} value={newAcc.type} onChange={e => setNewAcc(p => ({ ...p, type: e.target.value }))}>{Object.keys(ACCOUNT_ICONS).map(t => <option key={t}>{t}</option>)}</select>
+            <button style={s.btn("primary")} onClick={() => { if (!newAcc.name.trim()) return; onAdd(newAcc); setNewAcc({ name: "", type: "General" }); setAdding(false); }}>Add</button>
+          </div>
+        </div>
+      )}
+      {accounts.length === 0 && <div style={{ color: "#555", fontSize: 14, textAlign: "center", marginTop: "2rem" }}>No accounts yet. Create one above.</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+        {accounts.map(acc => { const bal = totalFor(acc.id); const col = ACCOUNT_COLORS[acc.type] || "#5f5e5a"; return (
+          <div key={acc.id} style={{ ...s.noteCard, borderLeft: `3px solid ${col}`, cursor: "pointer" }} onClick={() => onSelect(acc)}>
+            <div style={{ ...s.row, marginBottom: 6 }}>
+              <span style={{ fontSize: 18, color: col }}>{ACCOUNT_ICONS[acc.type] || "◎"}</span>
+              <span style={{ fontWeight: 500, fontSize: 15, flex: 1 }}>{acc.name}</span>
+              <button style={{ ...s.del, fontSize: 14 }} onClick={e => { e.stopPropagation(); onDel(acc.id); }}>×</button>
+            </div>
+            <div style={{ fontSize: 11, color: "#555", marginBottom: 8 }}>{acc.type}</div>
+            <div style={{ fontSize: 18, fontWeight: 500, color: bal >= 0 ? "#1d9e75" : "#e24b4a" }}>{fmt(bal)}</div>
+            <div style={{ fontSize: 11, color: "#444", marginTop: 4 }}>{txns.filter(t => t.accountId === acc.id).length} transactions</div>
+          </div>
+        ); })}
+      </div>
+    </div>
+  );
+}
+
+function AccountDetail({ account, txns, saveTxns, onBack }) {
+  const myTxns = txns.filter(t => t.accountId === account.id);
+  const [form, setForm] = useState({ desc: "", amount: "", type: "income", cat: "Salary", date: today() });
+  const [filter, setFilter] = useState("all");
+  const EXPENSE_CATS = ["Food", "Transport", "Bills", "Health", "Entertainment", "Shopping", "Other"];
+  const INCOME_CATS = ["Salary", "Freelance", "Investment", "Gift", "Other"];
+  const add = () => { if (!form.desc.trim() || !form.amount) return; saveTxns(p => [{ ...form, id: uid(), amount: parseFloat(form.amount), accountId: account.id }, ...p]); setForm({ desc: "", amount: "", type: "income", cat: "Salary", date: today() }); };
+  const del = (id) => saveTxns(p => p.filter(t => t.id !== id));
+  const income = myTxns.filter(t => t.type === "income").reduce((a, t) => a + t.amount, 0);
+  const expense = myTxns.filter(t => t.type === "expense").reduce((a, t) => a + t.amount, 0);
+  const bal = income - expense;
+  const visible = filter === "all" ? myTxns : myTxns.filter(t => t.type === filter);
+  const col = ACCOUNT_COLORS[account.type] || "#5f5e5a";
+  const catTotals = myTxns.filter(t => t.type === "expense").reduce((acc, t) => { acc[t.cat] = (acc[t.cat] || 0) + t.amount; return acc; }, {});
+  const topCats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  return (
+    <div>
+      <div style={{ ...s.row, marginBottom: "1.5rem" }}>
+        <button style={s.btn("ghost")} onClick={onBack}>← Accounts</button>
+        <span style={{ fontSize: 18, color: col }}>{ACCOUNT_ICONS[account.type] || "◎"}</span>
+        <span style={{ fontWeight: 500, fontSize: 18 }}>{account.name}</span>
+        <span style={{ fontSize: 12, color: "#555", background: "#1e1e2a", padding: "3px 10px", borderRadius: 6 }}>{account.type}</span>
+      </div>
+      <div style={{ display: "flex", gap: 12, marginBottom: "1.5rem", flexWrap: "wrap" }}>
+        {[["Balance", bal, bal >= 0 ? "#7f77dd" : "#e24b4a"], ["Money in", income, "#1d9e75"], ["Money out", expense, "#e24b4a"]].map(([l, v, c]) => <div key={l} style={s.metricCard}><div style={s.label}>{l}</div><div style={{ fontSize: 20, fontWeight: 500, color: c }}>{fmt(v)}</div></div>)}
+      </div>
+      {topCats.length > 0 && (
+        <div style={{ ...s.card, marginBottom: "1.5rem" }}>
+          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 12, color: "#aaa" }}>Top spending</div>
+          {topCats.map(([cat, amt]) => (<div key={cat} style={{ marginBottom: 10 }}>
+            <div style={{ ...s.row, marginBottom: 4 }}><span style={{ fontSize: 13, flex: 1 }}>{cat}</span><span style={{ fontSize: 13, color: "#e24b4a" }}>{fmt(amt)}</span></div>
+            <div style={s.prog()}><div style={{ ...s.progInner(expense ? (amt / expense) * 100 : 0), background: "#993c1d" }} /></div>
+          </div>))}
+        </div>
+      )}
+      <div style={s.card}>
+        <div style={{ ...s.row, flexWrap: "wrap" }}>
+          <input style={{ ...s.input, flex: 2 }} placeholder="Description…" value={form.desc} onChange={e => setForm(p => ({ ...p, desc: e.target.value }))} />
+          <input style={{ ...s.input, flex: 1 }} type="number" placeholder="Amount" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} />
+          <select style={s.select} value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value, cat: e.target.value === "income" ? "Salary" : "Food" }))}><option value="income">+ Money in</option><option value="expense">− Money out</option></select>
+          <select style={s.select} value={form.cat} onChange={e => setForm(p => ({ ...p, cat: e.target.value }))}>{(form.type === "income" ? INCOME_CATS : EXPENSE_CATS).map(c => <option key={c}>{c}</option>)}</select>
+          <input type="date" style={s.select} value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+          <button style={s.btn("primary")} onClick={add}>Add</button>
+        </div>
+      </div>
+      <div style={{ ...s.row, gap: 8, marginBottom: 12 }}>
+        {["all", "income", "expense"].map(f => <button key={f} style={s.btn(filter === f ? "primary" : "ghost")} onClick={() => setFilter(f)}>{f === "income" ? "Money in" : f === "expense" ? "Money out" : "All"}</button>)}
+      </div>
+      {visible.length === 0 && <div style={{ color: "#555", fontSize: 14, textAlign: "center", marginTop: "2rem" }}>No transactions yet.</div>}
+      {visible.map(t => (
+        <div key={t.id} style={{ ...s.card, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 500, fontSize: 14 }}>{t.desc}</div>
+            <div style={{ ...s.row, marginTop: 4, gap: 6 }}><span style={s.tag(t.cat)}>{t.cat}</span><span style={{ fontSize: 12, color: "#555" }}>{t.date}</span></div>
+          </div>
+          <span style={s.txBadge(t.type)}>{t.type === "income" ? "in" : "out"}</span>
+          <span style={{ fontWeight: 500, color: t.type === "income" ? "#1d9e75" : "#e24b4a", fontSize: 15 }}>{t.type === "income" ? "+" : "-"}{fmt(t.amount)}</span>
+          <button style={s.del} onClick={() => del(t.id)}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FinanceTracker({ txns, saveTxns }) {
+  const [accounts, setAccounts] = useStore("pos_accounts", []);
+  const [selected, setSelected] = useState(null);
+  const addAccount = (a) => setAccounts(p => [...p, { ...a, id: uid(), created: today() }]);
+  const delAccount = (id) => { setAccounts(p => p.filter(a => a.id !== id)); saveTxns(p => p.filter(t => t.accountId !== id)); if (selected?.id === id) setSelected(null); };
+  if (selected) return <AccountDetail account={selected} txns={txns} saveTxns={saveTxns} onBack={() => setSelected(null)} />;
+  return <AccountOverview accounts={accounts} txns={txns} onSelect={setSelected} onAdd={addAccount} onDel={delAccount} />;
+}
+
+// ── Second Brain ─────────────────────────────────────────────────────────────
+function SecondBrain({ notes, saveNotes }) {
+  const [open, setOpen] = useState(null);
+  const [form, setForm] = useState({ title: "", body: "", tag: "Idea" });
+  const [search, setSearch] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const save = () => { if (!form.title.trim()) return; if (open) { saveNotes(p => p.map(n => n.id === open.id ? { ...n, ...form, updated: today() } : n)); setOpen(null); } else { saveNotes(p => [{ ...form, id: uid(), created: today(), updated: today() }, ...p]); } setForm({ title: "", body: "", tag: "Idea" }); setAdding(false); };
+  const del = (id) => { saveNotes(p => p.filter(n => n.id !== id)); setOpen(null); };
+  const openNote = (n) => { setOpen(n); setForm({ title: n.title, body: n.body, tag: n.tag }); setAdding(true); };
+  const visible = notes.filter(n => !search || n.title.toLowerCase().includes(search.toLowerCase()) || n.body.toLowerCase().includes(search.toLowerCase()));
+
+  if (adding) return (
+    <div>
+      <div style={{ ...s.row, marginBottom: "1.5rem", gap: 8 }}>
+        <button style={s.btn("ghost")} onClick={() => { setAdding(false); setOpen(null); setForm({ title: "", body: "", tag: "Idea" }); }}>← Back</button>
+        <span style={{ color: "#555", fontSize: 13 }}>{open ? "Edit note" : "New note"}</span>
+      </div>
+      <div style={s.card}>
+        <input style={{ ...s.input, fontSize: 18, fontWeight: 500, marginBottom: 12, background: "transparent", border: "none", borderBottom: "0.5px solid #2e2e3a", borderRadius: 0, paddingLeft: 0 }} placeholder="Title…" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+        <textarea style={{ ...s.textarea, minHeight: 240, marginBottom: 12 }} placeholder="Write your note…" value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} />
+        <div style={s.row}>
+          <select style={s.select} value={form.tag} onChange={e => setForm(p => ({ ...p, tag: e.target.value }))}>{NOTE_TAGS.map(t => <option key={t}>{t}</option>)}</select>
+          <button style={s.btn("primary")} onClick={save}>Save</button>
+          {open && <button style={s.btn("ghost")} onClick={() => del(open.id)}>Delete</button>}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ ...s.row, marginBottom: "1.5rem" }}>
+        <input style={{ ...s.input, flex: 1 }} placeholder="Search notes…" value={search} onChange={e => setSearch(e.target.value)} />
+        <button style={s.btn("primary")} onClick={() => setAdding(true)}>+ New note</button>
+      </div>
+      {visible.length === 0 && <div style={{ color: "#555", fontSize: 14, textAlign: "center", marginTop: "2rem" }}>{search ? "No notes match." : "No notes yet. Create your first one!"}</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
+        {visible.map(n => (
+          <div key={n.id} style={s.noteCard} onClick={() => openNote(n)}>
+            <div style={{ fontWeight: 500, fontSize: 15, marginBottom: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.title}</div>
+            <div style={{ fontSize: 13, color: "#666", marginBottom: 10, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>{n.body || "No content"}</div>
+            <div style={{ ...s.row, justifyContent: "space-between" }}>
+              <span style={s.tag(n.tag)}>{n.tag}</span>
+              <span style={{ fontSize: 11, color: "#444" }}>{n.updated}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── App shell ────────────────────────────────────────────────────────────────
+function App() {
+  const [active, setActive] = useState("life");
+  const [tasks, saveTasks] = useStore("pos_tasks", []);
+  const [goals, saveGoals] = useStore("pos_goals", []);
+  const [habits, saveHabits] = useStore("pos_habits", []);
+  const [txns, saveTxns] = useStore("pos_txns", []);
+  const [notes, saveNotes] = useStore("pos_notes", []);
+  const TITLES = { life: "Life Planner", finance: "Finance Tracker", brain: "Second Brain" };
+
+  return (
+    <div style={s.app}>
+      <div style={s.sidebar}>
+        <div style={s.sideTitle}>Personal OS</div>
+        <div style={{ fontSize: 11, color: "#444", padding: "0 1.25rem", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>Modules</div>
+        {NAV.map(n => <div key={n.id} style={s.navItem(active === n.id)} onClick={() => setActive(n.id)}><span style={{ fontSize: 14 }}>{n.icon}</span><span>{n.label}</span></div>)}
+        <div style={{ flex: 1 }} />
+        <div style={{ padding: "0 1.25rem" }}><div style={{ fontSize: 11, color: "#333", textAlign: "center" }}>{new Date().toLocaleDateString("en-AU", { weekday: "long", month: "short", day: "numeric" })}</div></div>
+      </div>
+      <div style={s.main}>
+        <div style={s.header}>{TITLES[active]}</div>
+        {active === "life" && <LifePlanner tasks={tasks} saveTasks={saveTasks} goals={goals} saveGoals={saveGoals} habits={habits} saveHabits={saveHabits} />}
+        {active === "finance" && <FinanceTracker txns={txns} saveTxns={saveTxns} />}
+        {active === "brain" && <SecondBrain notes={notes} saveNotes={saveNotes} />}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
