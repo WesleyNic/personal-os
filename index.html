@@ -301,8 +301,13 @@ function FinanceTracker({ txns, saveTxns }) {
 }
 
 // ── Work Shifts ──────────────────────────────────────────────────────────────
+function getWeekStart(offset) {
+  const now = new Date();
+  const local = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  local.setDate(local.getDate() - local.getDay() + offset * 7);
+  return local;
+}
 function parseLocalDate(str) { const [y,m,d] = str.split("-").map(Number); return new Date(y, m-1, d); }
-function getWeekStart(date) { const d = new Date(date); d.setDate(d.getDate()-d.getDay()); d.setHours(0,0,0,0); return d; }
 function calcHours(start, end) {
   if (!start||!end) return null;
   const [sh,sm] = start.split(":").map(Number);
@@ -320,7 +325,7 @@ function WorkShifts({ shifts, saveShifts }) {
   const [workplaces, setWorkplaces] = useState([]);
   useEffect(() => { setWorkplaces([...new Set(shifts.map(s => s.workplace).filter(Boolean))]); }, [shifts]);
   const wpColor = (wp) => { const idx = workplaces.indexOf(wp); return SHIFT_COLORS[idx%SHIFT_COLORS.length]||"#534ab7"; };
-  const weekStart = getWeekStart(new Date(Date.now()+weekOffset*7*86400000));
+  const weekStart = getWeekStart(weekOffset);
   const weekDays = Array.from({ length:7 }, (_,i) => { const d = new Date(weekStart); d.setDate(d.getDate()+i); return d; });
   const toKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const shiftsForDay = (d) => { const key = toKey(d); return shifts.filter(s => s.date===key).sort((a,b) => a.start.localeCompare(b.start)); };
