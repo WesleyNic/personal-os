@@ -322,7 +322,8 @@ function WorkShifts({ shifts, saveShifts }) {
   const wpColor = (wp) => { const idx = workplaces.indexOf(wp); return SHIFT_COLORS[idx%SHIFT_COLORS.length]||"#534ab7"; };
   const weekStart = getWeekStart(new Date(Date.now()+weekOffset*7*86400000));
   const weekDays = Array.from({ length:7 }, (_,i) => { const d = new Date(weekStart); d.setDate(d.getDate()+i); return d; });
-  const shiftsForDay = (d) => { const key = d.toISOString().slice(0,10); return shifts.filter(s => s.date===key).sort((a,b) => a.start.localeCompare(b.start)); };
+  const toKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const shiftsForDay = (d) => { const key = toKey(d); return shifts.filter(s => s.date===key).sort((a,b) => a.start.localeCompare(b.start)); };
   const addShift = () => { if (!form.workplace.trim()||!form.date||!form.start) return; saveShifts(p => [...p, { ...form, id:uid(), end:form.openEnd?"":form.end }]); setForm({ workplace:"", desc:"", date:today(), start:"", end:"", openEnd:false }); setAdding(false); };
   const delShift = (id) => saveShifts(p => p.filter(s => s.id!==id));
   const weekLabel = () => { const end = new Date(weekStart); end.setDate(end.getDate()+6); return `${weekStart.toLocaleDateString("en-AU",{day:"numeric",month:"short"})} – ${end.toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"})}`; };
@@ -364,7 +365,7 @@ function WorkShifts({ shifts, saveShifts }) {
         </div>
       </div>}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:6 }}>
-        {weekDays.map((d,i) => { const isToday = d.toISOString().slice(0,10)===today(); const dayShifts = shiftsForDay(d); return (
+        {weekDays.map((d,i) => { const isToday = toKey(d)===today(); const dayShifts = shiftsForDay(d); return (
           <div key={i} style={{ background:"#18181f", border:`0.5px solid ${isToday?"#534ab7":"#2e2e3a"}`, borderRadius:10, padding:"0.6rem 0.5rem", minHeight:120 }}>
             <div style={{ fontSize:11, color:isToday?"#7f77dd":"#555", fontWeight:isToday?500:400, marginBottom:2 }}>{DAYS[d.getDay()]}</div>
             <div style={{ fontSize:15, fontWeight:500, color:isToday?"#7f77dd":"#f0f0f5", marginBottom:8 }}>{d.getDate()}</div>
