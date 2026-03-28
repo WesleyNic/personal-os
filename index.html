@@ -301,6 +301,7 @@ function FinanceTracker({ txns, saveTxns }) {
 }
 
 // ── Work Shifts ──────────────────────────────────────────────────────────────
+function parseLocalDate(str) { const [y,m,d] = str.split("-").map(Number); return new Date(y, m-1, d); }
 function getWeekStart(date) { const d = new Date(date); d.setDate(d.getDate()-d.getDay()); d.setHours(0,0,0,0); return d; }
 function calcHours(start, end) {
   if (!start||!end) return null;
@@ -380,7 +381,7 @@ function WorkShifts({ shifts, saveShifts }) {
       </div>
       {shifts.length > 0 && <div style={{ marginTop:"1.5rem" }}>
         <div style={{ fontSize:13, fontWeight:500, color:"#aaa", marginBottom:10 }}>All shifts</div>
-        {[...shifts].sort((a,b) => b.date.localeCompare(a.date)).map(sh => { const col = wpColor(sh.workplace); const d = new Date(sh.date+"T00:00:00"); const hrs = calcHours(sh.start,sh.end); return (
+        {[...shifts].sort((a,b) => b.date.localeCompare(a.date)).map(sh => { const col = wpColor(sh.workplace); const d = parseLocalDate(sh.date); const hrs = calcHours(sh.start,sh.end); return (
           <div key={sh.id} style={{ ...s.card, display:"flex", alignItems:"center", gap:12, borderLeft:`3px solid ${col}` }}>
             <div style={{ flex:1 }}>
               <div style={{ fontWeight:500, fontSize:14 }}>{sh.workplace}</div>
