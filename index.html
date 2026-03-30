@@ -613,7 +613,7 @@ function App() {
         {active==="brain" && <SecondBrain notes={notes} saveNotes={saveNotes} />}
         {active==="shifts" && <WorkShifts shifts={shifts} saveShifts={saveShifts} />}
         {active==="resources" && <Resources resources={resources} saveResources={saveResources} />}
-        {active==="flashcards" && <Flashcards subjects={fcSubjects} saveSubjects={saveFcSubjects} topics={fcTopics} saveTopics={saveFcTopics} cards={fcCards} saveCards={saveFcCards} />}
+        {active==="flashcards" && <FCBoundary><Flashcards subjects={fcSubjects} saveSubjects={saveFcSubjects} topics={fcTopics} saveTopics={saveFcTopics} cards={fcCards} saveCards={saveFcCards} /></FCBoundary>}
       </div>
     </div>
   );
