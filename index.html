@@ -79,6 +79,7 @@ const NAV = [
   { id: "brain", label: "Second Brain", icon: "◉" },
   { id: "shifts", label: "Work Shifts", icon: "◷" },
   { id: "resources", label: "Resources", icon: "◫" },
+  { id: "flashcards", label: "Flashcards", icon: "◪" },
 ];
 
 const RES_CATS = ["General", "Work", "Finance", "Health", "Learning", "Personal", "Other"];
@@ -591,7 +592,10 @@ function App() {
   const [notes, saveNotes] = useStore("pos_notes", []);
   const [shifts, saveShifts] = useStore("pos_shifts", []);
   const [resources, saveResources] = useStore("pos_resources", []);
-  const TITLES = { life:"Life Planner", finance:"Finance Tracker", brain:"Second Brain", shifts:"Work Shifts", resources:"Resources" };
+  const [fcSubjects, saveFcSubjects] = useStore("pos_fc_subjects", []);
+  const [fcTopics, saveFcTopics] = useStore("pos_fc_topics", []);
+  const [fcCards, saveFcCards] = useStore("pos_fc_cards", []);
+  const TITLES = { life:"Life Planner", finance:"Finance Tracker", brain:"Second Brain", shifts:"Work Shifts", resources:"Resources", flashcards:"Flashcards" };
   return (
     <div style={s.app}>
       <div style={s.sidebar}>
@@ -608,6 +612,7 @@ function App() {
         {active==="brain" && <SecondBrain notes={notes} saveNotes={saveNotes} />}
         {active==="shifts" && <WorkShifts shifts={shifts} saveShifts={saveShifts} />}
         {active==="resources" && <Resources resources={resources} saveResources={saveResources} />}
+        {active==="flashcards" && <Flashcards subjects={fcSubjects} saveSubjects={saveFcSubjects} topics={fcTopics} saveTopics={saveFcTopics} cards={fcCards} saveCards={saveFcCards} />}
       </div>
     </div>
   );
