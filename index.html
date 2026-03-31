@@ -48,6 +48,7 @@ const FULL_DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","
 const ACCOUNT_ICONS = { General: "◎", Savings: "◈", Investment: "◉", Cash: "◌", Other: "◍" };
 const ACCOUNT_COLORS = { General: "#534ab7", Savings: "#0f6e56", Investment: "#185fa5", Cash: "#854f0b", Other: "#5f5e5a" };
 const SHIFT_COLORS = ["#534ab7","#0f6e56","#185fa5","#854f0b","#993556","#3b6d11","#993c1d"];
+const FOLDER_COLORS = ["#534ab7","#0f6e56","#185fa5","#854f0b","#993556","#3b6d11","#993c1d"];
 
 const s = {
   app: { display: "flex", height: "100vh", fontFamily: "system-ui, sans-serif", background: "#0f0f13", color: "#f0f0f5", overflow: "hidden" },
@@ -81,10 +82,9 @@ const NAV = [
   { id: "resources", label: "Resources", icon: "◫" },
 ];
 
-const RES_CATS = ["General", "Work", "Finance", "Health", "Learning", "Personal", "Other"];
-
+// ── Resources ─────────────────────────────────────────────────────────────────
 function getFileIcon(url) {
-  if (!url) return "◫";
+  if (!url) return "FILE";
   const u = url.toLowerCase();
   if (u.includes(".pdf")) return "PDF";
   if (u.includes(".doc") || u.includes(".docx")) return "DOC";
@@ -96,110 +96,216 @@ function getFileIcon(url) {
   if (u.startsWith("http://") || u.startsWith("https://")) return "URL";
   return "FILE";
 }
-
 const FILE_COLORS = { PDF: "#993c1d", DOC: "#185fa5", XLS: "#0f6e56", PPT: "#854f0b", IMG: "#993556", VID: "#534ab7", ZIP: "#5f5e5a", URL: "#0c447c", FILE: "#444" };
 
-function Resources({ resources, saveResources }) {
-  const [search, setSearch] = useState("");
-  const [catFilter, setCatFilter] = useState("All");
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ title: "", url: "", cat: "General", desc: "" });
-  const [confirmDel, setConfirmDel] = useState(null);
+function ResourceCard({ r, folders, onDel, onEdit, open }) {
+  const [confirmDel, setConfirmDel] = useState(false);
+  const icon = getFileIcon(r.url);
+  const col = FILE_COLORS[icon] || "#444";
+  const myFolders = folders.filter(f => (r.folderIds || []).includes(f.id));
+  return (
+    <div style={{ ...s.noteCard, borderTop: `3px solid ${col}`, position: "relative" }}>
+      <div style={{ ...s.row, marginBottom: 8, alignItems: "flex-start" }}>
+        <div style={{ background: col+"22", color: col, border: `0.5px solid ${col}44`, borderRadius: 6, fontSize: 10, fontWeight: 700, padding: "3px 7px", letterSpacing: "0.05em", flexShrink: 0 }}>{icon}</div>
+        <span style={{ fontWeight: 500, fontSize: 14, flex: 1, marginLeft: 8, lineHeight: 1.4 }}>{r.title}</span>
+        <button style={{ ...s.del, flexShrink: 0 }} onClick={() => onEdit(r)}>✎</button>
+        <button style={{ ...s.del, flexShrink: 0 }} onClick={() => setConfirmDel(true)}>×</button>
+      </div>
+      {r.desc && <div style={{ fontSize: 12, color: "#666", marginBottom: 8, lineHeight: 1.5 }}>{r.desc}</div>}
+      {myFolders.length > 0 && (
+        <div style={{ ...s.row, gap: 4, marginBottom: 8, flexWrap: "wrap" }}>
+          {myFolders.map(f => {
+            const fc = FOLDER_COLORS[folders.indexOf(f) % FOLDER_COLORS.length];
+            return <span key={f.id} style={{ background: fc+"22", color: fc, border: `0.5px solid ${fc}44`, borderRadius: 6, fontSize: 11, padding: "2px 7px", fontWeight: 500 }}>⊟ {f.name}</span>;
+          })}
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "#444", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.url}</div>
+      <div style={{ ...s.row, justifyContent: "space-between", marginTop: 8 }}>
+        <span style={{ fontSize: 11, color: "#444" }}>{r.created}</span>
+        <button style={{ ...s.btn("primary"), fontSize: 12, padding: "0.3rem 0.75rem" }} onClick={() => open(r.url)}>Open</button>
+      </div>
+      {confirmDel && (
+        <div style={{ position: "absolute", inset: 0, background: "#0f0f13ee", borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "1rem" }}>
+          <span style={{ fontSize: 13, color: "#f0f0f5", textAlign: "center" }}>Delete "{r.title}"?</span>
+          <div style={s.row}>
+            <button style={{ ...s.btn("primary"), background: "#a32d2d", borderColor: "#e24b4a" }} onClick={() => onDel(r.id)}>Delete</button>
+            <button style={s.btn("ghost")} onClick={() => setConfirmDel(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const add = () => {
-    if (!form.title.trim() || !form.url.trim()) return;
+function ResourceForm({ initial, folders, onSave, onCancel }) {
+  const [form, setForm] = useState(initial || { title: "", url: "", desc: "", folderIds: [] });
+  const toggle = (fid) => setForm(p => ({ ...p, folderIds: (p.folderIds||[]).includes(fid) ? p.folderIds.filter(x => x !== fid) : [...(p.folderIds||[]), fid] }));
+  return (
+    <div style={{ ...s.card, marginBottom: "1.25rem" }}>
+      <div style={{ ...s.row, flexWrap: "wrap", marginBottom: 10 }}>
+        <input style={{ ...s.input, flex: 2 }} placeholder="Title…" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+      </div>
+      <div style={{ ...s.row, flexWrap: "wrap", marginBottom: 10 }}>
+        <input style={{ ...s.input, flex: 1 }} placeholder="URL or file path…" value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} />
+      </div>
+      <div style={{ ...s.row, flexWrap: "wrap", marginBottom: 10 }}>
+        <input style={{ ...s.input, flex: 1 }} placeholder="Description (optional)…" value={form.desc} onChange={e => setForm(p => ({ ...p, desc: e.target.value }))} />
+      </div>
+      {folders.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Add to folders (select multiple):</div>
+          <div style={{ ...s.row, gap: 6, flexWrap: "wrap" }}>
+            {folders.map((f, i) => {
+              const fc = FOLDER_COLORS[i % FOLDER_COLORS.length];
+              const sel = (form.folderIds||[]).includes(f.id);
+              return (
+                <button key={f.id} onClick={() => toggle(f.id)} style={{ background: sel ? fc+"33" : "transparent", color: sel ? fc : "#888", border: `0.5px solid ${sel ? fc+"88" : "#2e2e3a"}`, borderRadius: 8, fontSize: 12, padding: "0.3rem 0.75rem", cursor: "pointer", fontWeight: sel ? 500 : 400 }}>
+                  ⊟ {f.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <div style={s.row}>
+        <button style={s.btn("primary")} onClick={() => { if (!form.title.trim() || !form.url.trim()) return; onSave(form); }}>Save</button>
+        <button style={s.btn("ghost")} onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function Resources({ resources, saveResources, folders, saveFolders }) {
+  const [view, setView] = useState("all");
+  const [activeFolderId, setActiveFolderId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [addingFolder, setAddingFolder] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [confirmDelFolder, setConfirmDelFolder] = useState(null);
+
+  const open = (url) => { if (!url) return; window.open(url.startsWith("http") ? url : url, "_blank"); };
+
+  const addResource = (form) => {
     saveResources(p => [{ ...form, id: uid(), created: today() }, ...p]);
-    setForm({ title: "", url: "", cat: "General", desc: "" });
     setAdding(false);
   };
+  const editResource = (form) => {
+    saveResources(p => p.map(r => r.id === editing.id ? { ...r, ...form } : r));
+    setEditing(null);
+  };
+  const delResource = (id) => saveResources(p => p.filter(r => r.id !== id));
 
-  const del = (id) => { saveResources(p => p.filter(r => r.id !== id)); setConfirmDel(null); };
-
-  const open = (url) => {
-    if (!url) return;
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      window.open(url, "_blank");
-    } else {
-      window.open(url);
-    }
+  const addFolder = () => {
+    if (!folderName.trim()) return;
+    saveFolders(p => [...p, { id: uid(), name: folderName.trim(), created: today() }]);
+    setFolderName(""); setAddingFolder(false);
+  };
+  const delFolder = (id) => {
+    saveFolders(p => p.filter(f => f.id !== id));
+    saveResources(p => p.map(r => ({ ...r, folderIds: (r.folderIds||[]).filter(fid => fid !== id) })));
+    if (activeFolderId === id) { setActiveFolderId(null); setView("all"); }
+    setConfirmDelFolder(null);
   };
 
-  const visible = resources.filter(r => {
-    const matchSearch = !search || r.title.toLowerCase().includes(search.toLowerCase()) || (r.desc && r.desc.toLowerCase().includes(search.toLowerCase()));
-    const matchCat = catFilter === "All" || r.cat === catFilter;
-    return matchSearch && matchCat;
+  const activeFolder = folders.find(f => f.id === activeFolderId) || null;
+  const visibleResources = resources.filter(r => {
+    const matchSearch = !search || r.title.toLowerCase().includes(search.toLowerCase()) || (r.desc||"").toLowerCase().includes(search.toLowerCase());
+    const matchFolder = view === "all" || (r.folderIds||[]).includes(activeFolderId);
+    return matchSearch && matchFolder;
   });
-
-  const usedCats = ["All", ...RES_CATS.filter(c => resources.some(r => r.cat === c))];
 
   return (
     <div>
       <div style={{ display: "flex", gap: 12, marginBottom: "1.5rem", flexWrap: "wrap" }}>
         <div style={s.metricCard}><div style={s.label}>Total resources</div><div style={{ fontSize: 22, fontWeight: 500 }}>{resources.length}</div></div>
-        <div style={s.metricCard}><div style={s.label}>Categories used</div><div style={{ fontSize: 22, fontWeight: 500, color: "#7f77dd" }}>{[...new Set(resources.map(r => r.cat))].length}</div></div>
+        <div style={s.metricCard}><div style={s.label}>Folders</div><div style={{ fontSize: 22, fontWeight: 500, color: "#7f77dd" }}>{folders.length}</div></div>
+        <div style={s.metricCard}><div style={s.label}>Unfiled</div><div style={{ fontSize: 22, fontWeight: 500, color: "#888" }}>{resources.filter(r => !(r.folderIds||[]).length).length}</div></div>
       </div>
 
-      <div style={{ ...s.row, marginBottom: "1rem", justifyContent: "space-between" }}>
-        <input style={{ ...s.input, flex: 1, maxWidth: 340 }} placeholder="Search resources…" value={search} onChange={e => setSearch(e.target.value)} />
-        <button style={s.btn("primary")} onClick={() => setAdding(a => !a)}>+ Add resource</button>
-      </div>
-
-      {usedCats.length > 1 && (
-        <div style={{ ...s.row, gap: 6, marginBottom: "1.25rem", flexWrap: "wrap" }}>
-          {usedCats.map(c => <button key={c} style={{ ...s.btn(catFilter === c ? "primary" : "ghost"), fontSize: 12, padding: "0.3rem 0.75rem" }} onClick={() => setCatFilter(c)}>{c}</button>)}
-        </div>
-      )}
-
-      {adding && (
-        <div style={{ ...s.card, marginBottom: "1.25rem" }}>
-          <div style={{ ...s.row, flexWrap: "wrap", marginBottom: 10 }}>
-            <input style={{ ...s.input, flex: 2 }} placeholder="Title…" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
-            <select style={s.select} value={form.cat} onChange={e => setForm(p => ({ ...p, cat: e.target.value }))}>{RES_CATS.map(c => <option key={c}>{c}</option>)}</select>
+      <div style={{ display: "flex", gap: 16, marginBottom: "1.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ ...s.row, justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 12, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em" }}>Folders</span>
+            <button style={{ ...s.btn("ghost"), fontSize: 12, padding: "0.2rem 0.6rem" }} onClick={() => setAddingFolder(a => !a)}>+ New</button>
           </div>
-          <div style={{ ...s.row, flexWrap: "wrap", marginBottom: 10 }}>
-            <input style={{ ...s.input, flex: 1 }} placeholder="URL or file path (e.g. https://… or C:\Users\…)" value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} />
-          </div>
-          <div style={{ ...s.row, flexWrap: "wrap" }}>
-            <input style={{ ...s.input, flex: 1 }} placeholder="Description (optional)…" value={form.desc} onChange={e => setForm(p => ({ ...p, desc: e.target.value }))} />
-            <button style={s.btn("primary")} onClick={add}>Save</button>
-            <button style={s.btn("ghost")} onClick={() => { setAdding(false); setForm({ title: "", url: "", cat: "General", desc: "" }); }}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {visible.length === 0 && <div style={{ color: "#555", fontSize: 14, textAlign: "center", marginTop: "2rem" }}>{search || catFilter !== "All" ? "No resources match." : "No resources yet. Add one above."}</div>}
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
-        {visible.map(r => {
-          const icon = getFileIcon(r.url);
-          const col = FILE_COLORS[icon] || "#444";
-          return (
-            <div key={r.id} style={{ ...s.noteCard, borderTop: `3px solid ${col}`, position: "relative" }}>
-              <div style={{ ...s.row, marginBottom: 8, alignItems: "flex-start" }}>
-                <div style={{ background: col + "22", color: col, border: `0.5px solid ${col}44`, borderRadius: 6, fontSize: 10, fontWeight: 700, padding: "3px 7px", letterSpacing: "0.05em", flexShrink: 0 }}>{icon}</div>
-                <span style={{ fontWeight: 500, fontSize: 14, flex: 1, marginLeft: 8, lineHeight: 1.4 }}>{r.title}</span>
-                <button style={{ ...s.del, flexShrink: 0 }} onClick={() => setConfirmDel(r.id)}>×</button>
-              </div>
-              {r.desc && <div style={{ fontSize: 12, color: "#666", marginBottom: 8, lineHeight: 1.5 }}>{r.desc}</div>}
-              <div style={{ ...s.row, justifyContent: "space-between", marginTop: 4 }}>
-                <span style={s.tag(r.cat)}>{r.cat}</span>
-                <span style={{ fontSize: 11, color: "#444" }}>{r.created}</span>
-              </div>
-              <div style={{ fontSize: 11, color: "#444", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.url}</div>
-              <button style={{ ...s.btn("primary"), width: "100%", marginTop: 10, fontSize: 12 }} onClick={() => open(r.url)}>Open</button>
-
-              {confirmDel === r.id && (
-                <div style={{ position: "absolute", inset: 0, background: "#0f0f13ee", borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "1rem" }}>
-                  <span style={{ fontSize: 13, color: "#f0f0f5", textAlign: "center" }}>Delete "{r.title}"?</span>
-                  <div style={s.row}>
-                    <button style={{ ...s.btn("primary"), background: "#a32d2d", borderColor: "#e24b4a" }} onClick={() => del(r.id)}>Delete</button>
-                    <button style={s.btn("ghost")} onClick={() => setConfirmDel(null)}>Cancel</button>
-                  </div>
-                </div>
-              )}
+          {addingFolder && (
+            <div style={{ ...s.row, marginBottom: 8 }}>
+              <input style={{ ...s.input, flex: 1 }} placeholder="Folder name…" value={folderName} onChange={e => setFolderName(e.target.value)} onKeyDown={e => e.key === "Enter" && addFolder()} />
+              <button style={s.btn("primary")} onClick={addFolder}>Add</button>
             </div>
-          );
-        })}
+          )}
+          <div
+            onClick={() => { setView("all"); setActiveFolderId(null); }}
+            style={{ padding: "0.5rem 0.75rem", borderRadius: 8, fontSize: 13, cursor: "pointer", marginBottom: 4, background: view === "all" ? "#24243a" : "transparent", color: view === "all" ? "#fff" : "#888", borderLeft: view === "all" ? "2px solid #7f77dd" : "2px solid transparent" }}
+          >
+            All Resources ({resources.length})
+          </div>
+          {folders.map((f, i) => {
+            const fc = FOLDER_COLORS[i % FOLDER_COLORS.length];
+            const count = resources.filter(r => (r.folderIds||[]).includes(f.id)).length;
+            const isActive = activeFolderId === f.id;
+            return (
+              <div key={f.id} style={{ position: "relative" }}>
+                <div
+                  onClick={() => { setView("folder"); setActiveFolderId(f.id); }}
+                  style={{ padding: "0.5rem 0.75rem", borderRadius: 8, fontSize: 13, cursor: "pointer", marginBottom: 4, display: "flex", alignItems: "center", gap: 8, background: isActive ? fc+"22" : "transparent", color: isActive ? fc : "#888", borderLeft: isActive ? `2px solid ${fc}` : "2px solid transparent" }}
+                >
+                  <span style={{ flex: 1 }}>⊟ {f.name} ({count})</span>
+                  <button style={{ ...s.del, fontSize: 13 }} onClick={e => { e.stopPropagation(); setConfirmDelFolder(f.id); }}>×</button>
+                </div>
+                {confirmDelFolder === f.id && (
+                  <div style={{ position: "absolute", left: 0, right: 0, background: "#18181f", border: "0.5px solid #2e2e3a", borderRadius: 8, padding: "0.75rem", zIndex: 10, marginBottom: 4 }}>
+                    <div style={{ fontSize: 12, color: "#f0f0f5", marginBottom: 8 }}>Delete "{f.name}"?</div>
+                    <div style={s.row}>
+                      <button style={{ ...s.btn("primary"), background: "#a32d2d", borderColor: "#e24b4a", fontSize: 12 }} onClick={() => delFolder(f.id)}>Delete</button>
+                      <button style={{ ...s.btn("ghost"), fontSize: 12 }} onClick={() => setConfirmDelFolder(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {folders.length === 0 && !addingFolder && <div style={{ fontSize: 12, color: "#444", padding: "0.5rem 0.75rem" }}>No folders yet.</div>}
+        </div>
+
+        <div style={{ flex: 3, minWidth: 300 }}>
+          <div style={{ ...s.row, marginBottom: "1rem", justifyContent: "space-between" }}>
+            <input style={{ ...s.input, flex: 1, maxWidth: 300 }} placeholder="Search resources…" value={search} onChange={e => setSearch(e.target.value)} />
+            <button style={s.btn("primary")} onClick={() => { setAdding(true); setEditing(null); }}>+ Add resource</button>
+          </div>
+
+          {adding && (
+            <ResourceForm
+              folders={folders}
+              initial={{ title: "", url: "", desc: "", folderIds: activeFolderId ? [activeFolderId] : [] }}
+              onSave={addResource}
+              onCancel={() => setAdding(false)}
+            />
+          )}
+          {editing && (
+            <ResourceForm
+              folders={folders}
+              initial={editing}
+              onSave={editResource}
+              onCancel={() => setEditing(null)}
+            />
+          )}
+
+          {visibleResources.length === 0 && !adding && !editing && (
+            <div style={{ color: "#555", fontSize: 14, textAlign: "center", marginTop: "2rem" }}>
+              {search ? "No resources match." : view === "folder" ? `No resources in "${activeFolder?.name}" yet.` : "No resources yet. Add one above."}
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+            {visibleResources.map(r => (
+              <ResourceCard key={r.id} r={r} folders={folders} onDel={delResource} onEdit={(r) => { setEditing(r); setAdding(false); }} open={open} />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -591,6 +697,7 @@ function App() {
   const [notes, saveNotes] = useStore("pos_notes", []);
   const [shifts, saveShifts] = useStore("pos_shifts", []);
   const [resources, saveResources] = useStore("pos_resources", []);
+  const [folders, saveFolders] = useStore("pos_res_folders", []);
   const TITLES = { life:"Life Planner", finance:"Finance Tracker", brain:"Second Brain", shifts:"Work Shifts", resources:"Resources" };
   return (
     <div style={s.app}>
@@ -607,7 +714,7 @@ function App() {
         {active==="finance" && <FinanceTracker txns={txns} saveTxns={saveTxns} />}
         {active==="brain" && <SecondBrain notes={notes} saveNotes={saveNotes} />}
         {active==="shifts" && <WorkShifts shifts={shifts} saveShifts={saveShifts} />}
-        {active==="resources" && <Resources resources={resources} saveResources={saveResources} />}
+        {active==="resources" && <Resources resources={resources} saveResources={saveResources} folders={folders} saveFolders={saveFolders} />}
       </div>
     </div>
   );
